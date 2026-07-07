@@ -1,0 +1,36 @@
+// ============================================================
+// VCO - Voltage Controlled Oscillator (fast square-wave)
+// f_out = f0 + Kvco*(Vctrl-Vctrl0), idtmod phase accumulator
+// Added transition() for clean analog solver behavior
+// ============================================================
+`include "disciplines.vams"
+`include "constants.vams"
+
+module vco(vin, vout_p, vout_n);
+  input vin;
+  output vout_p, vout_n;
+  electrical vin, vout_p, vout_n;
+
+  parameter real f0     = 10.0G;
+  parameter real kvco   = 50.0M;
+  parameter real vctrl0 = 0.9;
+  parameter real vmin   = 0.0;
+  parameter real vmax   = 1.8;
+  parameter real vdd    = 1.8;
+
+  real freq, phase, clk_val, vctrl_clamped;
+
+  analog begin
+    vctrl_clamped = V(vin);
+    if (vctrl_clamped < vmin) vctrl_clamped = vmin;
+    if (vctrl_clamped > vmax) vctrl_clamped = vmax;
+
+    freq = f0 + kvco * (vctrl_clamped - vctrl0);
+    phase = idtmod(freq, 0.0, 1.0, -0.5);
+
+    clk_val = (phase < 0.0) ? vdd : 0.0;
+
+    V(vout_p) <+ transition(clk_val, 5p, 5p, 5p);
+    V(vout_n) <+ 0.0;
+  end
+endmodule

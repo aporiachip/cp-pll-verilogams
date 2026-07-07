@@ -1,0 +1,35 @@
+`include "disciplines.vams"
+`include "constants.vams"
+
+module tb_pll;
+  electrical ref, vout_p, vout_n, vtune, lock_det;
+  parameter real fref = 50.0M;
+  parameter real tref = 1.0/fref;
+  parameter real vdd = 1.8;
+  real ref_clk;
+  integer fd;
+
+  analog begin
+    @(initial_step) begin
+      ref_clk = 0.0;
+      fd = $fopen("vctrl_data.txt");
+    end
+
+    ref_clk = ((($abstime + tref/2) % tref) < tref/2) ? vdd : 0.0;
+    V(ref) <+ transition(ref_clk, 100p, 50p, 50p);
+    $bound_step(50p);
+
+    @(timer(0, 1u)) begin
+      $strobe("t=%0.1fus  vctrl=%.6f V", $abstime/1u, V(vtune));
+    end
+
+    @(timer(20u, 1n)) begin
+      $fstrobe(fd, "%.12e %.12e", $abstime, V(vtune));
+    end
+  end
+
+  pll_top #(.vdd(vdd)) i_pll (
+    .ref(ref), .vout_p(vout_p), .vout_n(vout_n),
+    .vtune(vtune), .lock_det(lock_det)
+  );
+endmodule

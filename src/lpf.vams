@@ -1,0 +1,24 @@
+// 2nd-order CP-PLL LPF: C2 || (R1 + C1)
+// Correct topology with stabilizing zero at 1/(R1*C1)
+`include "disciplines.vams"
+`include "constants.vams"
+
+module lpf(in, out);
+  input in;
+  output out;
+  electrical in, out;
+
+  parameter real r1 = 25.0K;
+  parameter real c1 = 250.0p;
+  parameter real c2 = 5.0p;
+  parameter real r3 = 5.0K;
+  parameter real c3 = 80.0p;
+
+  analog begin
+    // KCL at CP_out: Icp flows into R1 and C2
+    I(in) <+ (V(out) - V(in)) / r1 - c2 * ddt(V(in));
+
+    // KCL at VCO_in: R1 current charges C1
+    I(out) <+ (V(in) - V(out)) / r1 - c1 * ddt(V(out));
+  end
+endmodule

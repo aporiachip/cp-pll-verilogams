@@ -1,0 +1,12 @@
+`include "disciplines.vams"
+module tb_div_noise;
+  electrical clk_in, clk_out;
+  integer fd;
+  analog begin
+    @(initial_step) fd=$fopen("div_noise_data.txt");
+    V(clk_in)<+0.0;
+    @(timer(0,1n)) $fstrobe(fd,"%.12e %.12e",$abstime,V(clk_out));
+  end
+  divider #(.N(200),.vdd(1.8),.vth(0.9),.trf(30p))
+    i_div(.clk_in(clk_in),.clk_out(clk_out));
+endmodule

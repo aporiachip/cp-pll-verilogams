@@ -1,0 +1,2 @@
+SOFTINCLUDE /opt/cadence/IC618/share/cdssetup/cds.lib
+DEFINE CPPLL /home/user/workspace_hermes/proj1/Lib/CPPLL

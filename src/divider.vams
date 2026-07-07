@@ -1,0 +1,20 @@
+`include "disciplines.vams"
+`include "constants.vams"
+module divider (clk_in, clk_out);
+  input clk_in; output clk_out;
+  electrical clk_in, clk_out;
+  parameter integer N=200;
+  parameter real vdd=1.8, vth=0.9, trf=30p;
+  integer count; real out_state;
+  analog begin
+    @(initial_step) begin count=0; out_state=0.0; end
+    @(cross(V(clk_in)-vth,+1)) begin
+      count=count+1;
+      if(count>=N/2&&out_state<0.5) begin out_state=1.0; count=0; end
+      else if(count>=N/2&&out_state>0.5) begin out_state=0.0; count=0; end
+    end
+    V(clk_out) <+ transition(out_state*vdd,50p,trf,trf);
+    V(clk_out) <+ white_noise(1e-16,"div_th");
+    V(clk_out) <+ flicker_noise(1e-16,1.0,"div_fl");  // was 1e-13
+  end
+endmodule

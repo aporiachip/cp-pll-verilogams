@@ -1,0 +1,12 @@
+`include "disciplines.vams"
+module tb_pfd_noise;
+  electrical ref, fb, up, dn;
+  integer fd;
+  analog begin
+    @(initial_step) fd=$fopen("pfd_noise_data.txt");
+    V(ref)<+0.0; V(fb)<+0.0;
+    @(timer(0,1n)) $fstrobe(fd,"%.12e %.12e",$abstime,V(up));
+  end
+  pfd #(.vdd(1.8),.vth(0.9),.td_reset(300p),.td_ff(80p),.trf(40p))
+    i_pfd(.ref(ref),.fb(fb),.up(up),.dn(dn));
+endmodule

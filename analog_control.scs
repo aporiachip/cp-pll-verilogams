@@ -1,0 +1,1 @@
+sim1 tran stop=30u step=50p method=gear2only noisefmin=1k noisefmax=10M noiseseed=123

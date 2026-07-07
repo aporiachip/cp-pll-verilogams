@@ -1,0 +1,15 @@
+`include "disciplines.vams"
+module tb_cp_noise;
+  electrical up, dn, out;
+  parameter real rload = 1.0K;
+  integer fd;
+  analog begin
+    @(initial_step) fd = $fopen("cp_noise_data.txt");
+    V(up) <+ 1.8;
+    V(dn) <+ 0.0;
+    I(out) <+ V(out) / rload;
+    @(timer(0, 1n)) $fstrobe(fd, "%.12e %.12e", $abstime, V(out));
+  end
+  cp #(.icp(100u), .vdd(1.8), .vth(1.0), .rout(100e6))
+    i_cp (.up(up), .dn(dn), .out(out));
+endmodule

@@ -1,0 +1,61 @@
+// VCO with parameterized phase noise (3-point model)
+// pn_1k, pn_10k, pn_1M: dBc/Hz at 1kHz, 10kHz, 1MHz
+// Automatically separates white (1/f^2) and flicker (1/f^3) components
+
+`include "disciplines.vams"
+`include "constants.vams"
+
+module vco(vin, vout_p, vout_n);
+  input vin; output vout_p, vout_n;
+  electrical vin, vout_p, vout_n;
+  electrical nz;
+
+  parameter real f0=10.0G, kvco=50.0M, vctrl0=0.9;
+  parameter real vmin=0.0, vmax=1.8, vdd=1.8;
+
+  // Phase noise targets (dBc/Hz)
+  parameter real pn_1k  = -60.0;   // @ 1kHz  (defines 1/f^3 region)
+  parameter real pn_10k = -80.0;   // @ 10kHz
+  parameter real pn_1M  = -120.0;  // @ 1MHz (white floor)
+
+  real freq, phase, clk_val, vctrl_clamped;
+  real L1k, L10k, L1M, S_f_1k, S_f_10k, S_f_white;
+  real S_f_fl_1k, K_f, S_v_white, S_v_fl;
+
+  analog begin
+    @(initial_step) begin
+      L1k  = pow(10.0, pn_1k/10.0);
+      L10k = pow(10.0, pn_10k/10.0);
+      L1M  = pow(10.0, pn_1M/10.0);
+
+      // Convert L(f) -> S_f(f) = L(f) * 2 * f^2
+      S_f_1k   = L1k  * 2.0 * 1.0e3 * 1.0e3;
+      S_f_10k  = L10k * 2.0 * 10.0e3 * 10.0e3;
+      S_f_white = L1M  * 2.0 * 1.0e6 * 1.0e6;
+
+      // Flicker: S_f_flicker(f) = K_f / f
+      // At 1kHz: S_f_1k = S_f_white + K_f/1000
+      K_f = (S_f_1k - S_f_white) * 1.0e3;
+      if (K_f < 0.0) K_f = 0.0;
+
+      // Voltage noise (1V = 1Hz freq deviation)
+      S_v_white = S_f_white;
+      S_v_fl    = K_f;
+    end
+
+    // Noise injection
+    V(nz) <+ white_noise(S_v_white, "vco_freq_white");
+    if (K_f > 0.0)
+      V(nz) <+ flicker_noise(S_v_fl, 1.0, "vco_freq_fl");
+
+    vctrl_clamped = V(vin);
+    if (vctrl_clamped < vmin) vctrl_clamped = vmin;
+    if (vctrl_clamped > vmax) vctrl_clamped = vmax;
+
+    freq = f0 + kvco*(vctrl_clamped - vctrl0) + V(nz);
+    phase = idtmod(freq, 0.0, 1.0, -0.5);
+    clk_val = (phase < 0.0) ? vdd : 0.0;
+    V(vout_p) <+ transition(clk_val, 5p, 5p, 5p);
+    V(vout_n) <+ 0.0;
+  end
+endmodule
