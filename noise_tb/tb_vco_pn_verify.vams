@@ -1,0 +1,23 @@
+// VCO PN verification testbench
+`include "disciplines.vams"
+module tb_vco_pn;
+  electrical vin;
+  wire vout_p, vout_n;
+  integer fd;
+
+  analog begin
+    V(vin) <+ 0.9;
+  end
+
+  initial begin
+    fd = $fopen("vco_edges.txt");
+  end
+
+  always @(posedge vout_p) begin
+    $fstrobe(fd, "%.6f", $realtime * 1e9);
+  end
+
+  vco #(.f0(10.0G),.kvco(50.0M),.vctrl0(0.9),.vmin(0.0),.vmax(1.8),.vdd(1.8),
+        .L_1k(-60.0),.L_10M(-120.0))
+    i_vco(.vin(vin),.vout_p(vout_p),.vout_n(vout_n));
+endmodule
