@@ -19,13 +19,13 @@ TB_SRC    := $(SIM_DIR)/tb_pll.vams
 ALL_SRC   := $(AMS_SRC) $(TB_SRC)
 
 # --- Xcelium/xrun options ---
-# -ams:             enable AMS (analog mixed-signal) simulation
+# -ams +define+USE_VERILOG:             enable AMS (analog mixed-signal) simulation
 # -timescale:       set simulation time precision
 # +access+r:        read access to all signals
 # -analogcontrol:   Spectre transient analysis control file
 # -input:           TCL script to record waveforms (probe.tcl)
 XRUN      := xrun
-XRUN_OPTS := -ams \
+XRUN_OPTS := -ams +define+USE_VERILOG \
              -timescale 1ps/1fs \
              +access+r \
              -status \

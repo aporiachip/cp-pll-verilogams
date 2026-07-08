@@ -1,27 +1,75 @@
-// CP - Mixed: digital UP/DN inputs, analog current output
+// CP - Charge Pump with dual implementation
+//  `define USE_VERILOG  → mixed: digital in, analog out (current code)
+//  undefined           → pure Verilog-A: electrical in/out (legacy)
+
 `include "disciplines.vams"
 `include "constants.vams"
 
-module cp(input up, input dn, output out);
+`ifdef USE_VERILOG
+
+// === Mixed Verilog/AMS: digital UP/DN, analog current output ===
+module cp(up, dn, out);
+  input up, dn;
+  output out;
   electrical out;
 
   parameter real icp  = 100u;
-  parameter real vdd  = 1.8;
-  parameter real vth  = 1.0;      // unused in digital, kept for compat
+  parameter real vmax = 1.8;
+  parameter real vmin = 0.0;
+  parameter real rout = 100e6;
+
+  real i_raw, i_out;
+
+  analog begin
+    if (up && !dn)          i_raw =  icp;
+    else if (dn && !up)     i_raw = -icp;
+    else                    i_raw = 0.0;
+
+    // Voltage clamp
+    if (V(out) >= vmax && i_raw >= 0)
+      i_out = 0.0;
+    else if (V(out) <= vmin && i_raw <= 0)
+      i_out = 0.0;
+    else
+      i_out = i_raw;
+
+    I(out) <+ transition(i_out, 0, 10p, 10p);
+    I(out) <+ V(out) / rout;
+    I(out) <+ white_noise(2e-22, "cp_th");
+    I(out) <+ flicker_noise(2e-19, 1.0, "cp_fl");
+  end
+endmodule
+
+`else
+
+// === Pure Verilog-A: electrical ports with V(up)/V(dn) threshold ===
+module cp (up, dn, out);
+  input up, dn;
+  output out;
+  electrical up, dn, out;
+
+  parameter real icp = 100u;
+  parameter real vdd = 1.8;
+  parameter real vth = 1.0;
   parameter real rout = 100e6;
 
   real i_out;
 
-  always @(*) begin
-    if (up && !dn)          i_out =  icp;
-    else if (dn && !up)     i_out = -icp;
-    else                    i_out = 0.0;
-  end
-
   analog begin
+    if (V(up) > vth && V(dn) < vth)
+      i_out = icp;
+    else if (V(dn) > vth && V(up) < vth)
+      i_out = -icp;
+    else if (V(up) > vth && V(dn) > vth)
+      i_out = 0.0;
+    else
+      i_out = 0.0;
+
     I(out) <+ transition(i_out, 100p, 20p, 20p);
     I(out) <+ V(out) / rout;
     I(out) <+ white_noise(2e-22, "cp_th");
     I(out) <+ flicker_noise(2e-19, 1.0, "cp_fl");
   end
 endmodule
+
+`endif
