@@ -1,21 +1,41 @@
-// Divider - Pure Verilog (VCO output is now digital reg)
-`timescale 1ps/1ps
+// Divider - Dual implementation
+// `define USE_VERILOG → pure Verilog @(posedge clk_in)
+// undefined          → Verilog-AMS @(cross) with electrical input
+`include "disciplines.vams"
+`include "constants.vams"
 
+`ifdef USE_VERILOG
+
+`timescale 1ps/1ps
 module divider(input clk_in, output reg clk_out);
   parameter integer N = 200;
-
   integer count;
-
-  initial begin
-    count = 0;
-    clk_out = 0;
-  end
-
+  initial begin count=0; clk_out=0; end
   always @(posedge clk_in) begin
     count <= count + 1;
     if (count >= N/2 - 1) begin
       clk_out <= #50 ~clk_out;
-      count   <= 0;
+      count <= 0;
     end
   end
 endmodule
+
+`else
+
+module divider(clk_in, clk_out);
+  input clk_in; output reg clk_out;
+  electrical clk_in;
+  parameter integer N=200;
+  parameter real vdd=1.8, vth=0.9, trf=30p;
+  integer count;
+  initial begin count=0; clk_out=0; end
+  always @(cross(V(clk_in)-vth,+1)) begin
+    count = count + 1;
+    if (count >= N/2) begin
+      clk_out <= #50 ~clk_out;
+      count = 0;
+    end
+  end
+endmodule
+
+`endif

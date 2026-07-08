@@ -1,21 +1,22 @@
-// PLL_TOP - Mixed digital/analog
+// PLL_TOP - Dual implementation
+// `define USE_VERILOG → digital PFD/Divider/VCO, mixed CP
+// undefined          → all Verilog-A (electrical ports)
 `include "disciplines.vams"
 `include "constants.vams"
 
+`ifdef USE_VERILOG
+
 module pll_top(ref, vout_p, vout_n, vtune, lock_det);
   input ref;
-  output vout_p, vout_n;
+  output wire vout_p, vout_n;
   output vtune, lock_det;
-  wire vout_p, vout_n;
-  electrical vtune, lock_det;
-  electrical cp_out, dummy;
+  electrical vtune, lock_det, cp_out, dummy;
   wire up, dn, fb, vco_out;
-
   parameter real vdd = 1.8;
 
   pfd #(.vdd(vdd),.vth(0.9),.td_reset(300),.td_ff(80),.trf(40))
     i_pfd(.ref(ref),.fb(fb),.up(up),.dn(dn));
-  cp #(.icp(100u),.vdd(vdd),.vth(1.0))
+  cp #(.icp(100u),.vmax(1.8),.vmin(0.0))
     i_cp(.up(up),.dn(dn),.out(cp_out));
   lpf #(.r1(25.0K),.c1(250.0p),.c2(5.0p),.r3(5.0K),.c3(80.0p))
     i_lpf(.in(cp_out),.out(dummy));
@@ -23,11 +24,35 @@ module pll_top(ref, vout_p, vout_n, vtune, lock_det);
     i_vco(.vin(cp_out),.vout_p(vco_out),.vout_n(vout_n));
   divider #(.N(200))
     i_div(.clk_in(vco_out),.clk_out(fb));
-
   assign vout_p = vco_out;
-
   analog begin
     V(vtune) <+ V(cp_out);
     V(lock_det) <+ 0.0;
   end
 endmodule
+
+`else
+
+module pll_top (ref, vout_p, vout_n, vtune, lock_det);
+  input ref; output vout_p, vout_n, vtune, lock_det;
+  electrical ref, vout_p, vout_n, vtune, lock_det;
+  electrical up, dn, cp_out, fb, dummy;
+  parameter real vdd = 1.8;
+
+  pfd #(.vdd(vdd),.vth(0.9),.td_reset(300p),.td_ff(80p),.trf(40p))
+    i_pfd(.ref(ref),.fb(fb),.up(up),.dn(dn));
+  cp #(.icp(100u),.vdd(vdd),.vth(1.0))
+    i_cp(.up(up),.dn(dn),.out(cp_out));
+  lpf #(.r1(25.0K),.c1(250.0p),.c2(5.0p),.r3(5.0K),.c3(80.0p))
+    i_lpf(.in(cp_out),.out(dummy));
+  vco #(.f0(10.0G),.kvco(50.0M),.vctrl0(0.9),.vmin(0.0),.vmax(1.8),.vdd(1.8))
+    i_vco(.vin(cp_out),.vout_p(vout_p),.vout_n(vout_n));
+  divider #(.N(200),.vdd(vdd),.vth(0.9),.trf(30p))
+    i_div(.clk_in(vout_p),.clk_out(fb));
+  analog begin
+    V(vtune) <+ V(cp_out);
+    V(lock_det) <+ 0.0;
+  end
+endmodule
+
+`endif
