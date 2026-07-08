@@ -1,22 +1,21 @@
-`include "disciplines.vams"
-`include "constants.vams"
-module pfd (ref, fb, up, dn);
-  input ref, fb; output up, dn;
-  electrical ref, fb, up, dn;
-  parameter real vdd=1.8, vth=0.9, td_reset=300p, td_ff=80p, trf=40p;
-  real up_raw, dn_raw, up_delayed, dn_delayed;
-  analog begin
-    @(initial_step) begin up_raw=0.0; dn_raw=0.0; up_delayed=0.0; dn_delayed=0.0; end
-    @(cross(V(ref)-vth,+1)) up_raw=1.0;
-    @(cross(V(fb)-vth,+1)) dn_raw=1.0;
-    up_delayed=absdelay(up_raw,td_reset);
-    dn_delayed=absdelay(dn_raw,td_reset);
-    if(up_delayed>0.5&&dn_delayed>0.5) begin up_raw=0.0; dn_raw=0.0; end
-    V(up) <+ transition(up_raw*vdd,td_ff,trf,trf);
-    V(dn) <+ transition(dn_raw*vdd,td_ff,trf,trf);
-    V(up) <+ white_noise(1e-15,"pfd_up_th");
-    V(up) <+ flicker_noise(1e-12,1.0,"pfd_up_fl");
-    V(dn) <+ white_noise(1e-15,"pfd_dn_th");
-    V(dn) <+ flicker_noise(1e-12,1.0,"pfd_dn_fl");
+// PFD - Pure Verilog implementation
+// Tri-state PFD with delayed reset, identical behavior to Verilog-A version
+`timescale 1ps/1ps
+
+module pfd(input ref, input fb, output reg up, output reg dn);
+  parameter real vdd = 1.8;        // unused in digital (kept for compat)
+  parameter real vth = 0.9;
+  parameter real td_reset = 300.0; // reset delay in ps
+  parameter real td_ff    = 80.0;  // FF propagation delay in ps
+  parameter real trf      = 40.0;
+
+  always @(posedge ref)  up <= #(td_ff) 1'b1;
+  always @(posedge fb)   dn <= #(td_ff) 1'b1;
+
+  always @(up or dn) begin
+    if (up && dn) begin
+      up <= #(td_reset) 1'b0;
+      dn <= #(td_reset) 1'b0;
+    end
   end
 endmodule

@@ -1,36 +1,38 @@
-// PLL_TOP ¡ª VCO driven from cp_out (zero preserved)
-// LPF as passive load, dummy node for unused LPF output
+// PLL_TOP - Mixed digital/analog
+// PFD, Divider = digital; CP = mixed; LPF, VCO = analog
 `include "disciplines.vams"
 `include "constants.vams"
 
-module pll_top (ref, vout_p, vout_n, vtune, lock_det);
+module pll_top(ref, vout_p, vout_n, vtune, lock_det);
   input ref;
   output vout_p, vout_n, vtune, lock_det;
-  electrical ref, vout_p, vout_n, vtune, lock_det;
-  electrical up, dn;
-  electrical cp_out;
-  electrical fb;
-  electrical dummy;
+  electrical vout_p, vout_n, vtune, lock_det;
+  electrical cp_out, dummy;
+  wire up, dn, fb;             // digital nets
 
   parameter real vdd = 1.8;
 
-  pfd #(.vdd(vdd), .vth(0.9), .td_reset(300p), .td_ff(80p), .trf(40p))
+  // PFD: digital
+  pfd #(.vdd(vdd), .vth(0.9), .td_reset(300), .td_ff(80), .trf(40))
     i_pfd (.ref(ref), .fb(fb), .up(up), .dn(dn));
 
+  // CP: digital in, analog out
   cp #(.icp(100u), .vdd(vdd), .vth(1.0))
     i_cp (.up(up), .dn(dn), .out(cp_out));
 
-  // LPF as passive impedance on cp_out
+  // LPF: analog (passive impedance on cp_out)
   lpf #(.r1(25.0K), .c1(250.0p), .c2(5.0p), .r3(5.0K), .c3(80.0p))
     i_lpf (.in(cp_out), .out(dummy));
 
-  // VCO driven from cp_out (where the stabilizing zero lives)
+  // VCO: analog (driven from cp_out)
   vco #(.f0(10.0G), .kvco(50.0M), .vctrl0(0.9), .vmin(0.0), .vmax(1.8), .vdd(1.8))
     i_vco (.vin(cp_out), .vout_p(vout_p), .vout_n(vout_n));
 
-  divider #(.N(200), .vdd(vdd), .vth(0.9), .trf(30p))
+  // Divider: digital (AMS auto-connects vout_p analog -> clk_in digital)
+  divider #(.N(200), .vdd(vdd), .vth(0.9), .trf(30))
     i_div (.clk_in(vout_p), .clk_out(fb));
 
+  // Monitor
   analog begin
     V(vtune) <+ V(cp_out);
     V(lock_det) <+ 0.0;
