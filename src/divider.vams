@@ -1,11 +1,15 @@
-// Divider - Pure Verilog implementation
-// Divides by N. AMS connect module auto-converts VCO analog -> digital
-`timescale 1ps/1ps
+// Divider - Verilog-AMS: analog input (cross detection), digital output
+`include "disciplines.vams"
+`include "constants.vams"
 
-module divider(input clk_in, output reg clk_out);
+module divider(clk_in, clk_out);
+  input clk_in;                 // analog from VCO
+  output reg clk_out;           // digital to PFD
+  electrical clk_in;
+
   parameter integer N = 200;
   parameter real vdd = 1.8;
-  parameter real vth = 0.9;       // unused in digital
+  parameter real vth = 0.9;
   parameter real trf = 30.0;
 
   integer count;
@@ -15,11 +19,12 @@ module divider(input clk_in, output reg clk_out);
     clk_out = 0;
   end
 
-  always @(posedge clk_in) begin
-    count <= count + 1;
-    if (count >= N/2 - 1) begin
+  // Cross detection: triggers on VCO rising edge
+  always @(cross(V(clk_in) - vth, +1)) begin
+    count = count + 1;
+    if (count >= N/2) begin
       clk_out <= #50 ~clk_out;
-      count   <= 0;
+      count = 0;
     end
   end
 endmodule
