@@ -1,38 +1,31 @@
 // PLL_TOP - Mixed digital/analog
-// PFD, Divider = digital; CP = mixed; LPF, VCO = analog
 `include "disciplines.vams"
 `include "constants.vams"
 
 module pll_top(ref, vout_p, vout_n, vtune, lock_det);
   input ref;
-  output vout_p, vout_n, vtune, lock_det;
-  electrical vout_p, vout_n, vtune, lock_det;
+  output vout_p, vout_n;
+  output vtune, lock_det;
+  wire vout_p, vout_n;
+  electrical vtune, lock_det;
   electrical cp_out, dummy;
-  wire up, dn, fb;             // digital nets
+  wire up, dn, fb, vco_out;
 
   parameter real vdd = 1.8;
 
-  // PFD: digital
-  pfd #(.vdd(vdd), .vth(0.9), .td_reset(300), .td_ff(80), .trf(40))
-    i_pfd (.ref(ref), .fb(fb), .up(up), .dn(dn));
+  pfd #(.vdd(vdd),.vth(0.9),.td_reset(300),.td_ff(80),.trf(40))
+    i_pfd(.ref(ref),.fb(fb),.up(up),.dn(dn));
+  cp #(.icp(100u),.vdd(vdd),.vth(1.0))
+    i_cp(.up(up),.dn(dn),.out(cp_out));
+  lpf #(.r1(25.0K),.c1(250.0p),.c2(5.0p),.r3(5.0K),.c3(80.0p))
+    i_lpf(.in(cp_out),.out(dummy));
+  vco #(.f0(10.0G),.kvco(50.0M),.vctrl0(0.9),.vmin(0.0),.vmax(1.8),.vdd(1.8))
+    i_vco(.vin(cp_out),.vout_p(vco_out),.vout_n(vout_n));
+  divider #(.N(200))
+    i_div(.clk_in(vco_out),.clk_out(fb));
 
-  // CP: digital in, analog out
-  cp #(.icp(100u), .vdd(vdd), .vth(1.0))
-    i_cp (.up(up), .dn(dn), .out(cp_out));
+  assign vout_p = vco_out;
 
-  // LPF: analog (passive impedance on cp_out)
-  lpf #(.r1(25.0K), .c1(250.0p), .c2(5.0p), .r3(5.0K), .c3(80.0p))
-    i_lpf (.in(cp_out), .out(dummy));
-
-  // VCO: analog (driven from cp_out)
-  vco #(.f0(10.0G), .kvco(50.0M), .vctrl0(0.9), .vmin(0.0), .vmax(1.8), .vdd(1.8))
-    i_vco (.vin(cp_out), .vout_p(vout_p), .vout_n(vout_n));
-
-  // Divider: digital (AMS auto-connects vout_p analog -> clk_in digital)
-  divider #(.N(200), .vdd(vdd), .vth(0.9), .trf(30))
-    i_div (.clk_in(vout_p), .clk_out(fb));
-
-  // Monitor
   analog begin
     V(vtune) <+ V(cp_out);
     V(lock_det) <+ 0.0;

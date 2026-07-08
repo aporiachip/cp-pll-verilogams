@@ -4,15 +4,13 @@
 
 module tb_pll;
   reg ref;
-  electrical vout_p, vout_n;     // analog from VCO
-  electrical vtune, lock_det;    // analog from pll_top
+  wire vout_p, vout_n;           // digital from VCO
+  electrical vtune, lock_det;    // analog monitor
   parameter real vdd = 1.8;
 
-  // 50 MHz reference clock
   initial ref = 0;
   always #10000 ref = ~ref;
 
-  // Monitor vctrl (analog block needed for V() access)
   analog begin
     $bound_step(50p);
     @(timer(0, 1u))

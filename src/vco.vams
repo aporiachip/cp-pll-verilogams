@@ -1,15 +1,13 @@
-// ============================================================
-// VCO - Voltage Controlled Oscillator (fast square-wave)
-// f_out = f0 + Kvco*(Vctrl-Vctrl0), idtmod phase accumulator
-// Added transition() for clean analog solver behavior
-// ============================================================
+// VCO - Mixed: analog reads voltage, computes period in fs for precision
+`timescale 1fs/1fs
 `include "disciplines.vams"
 `include "constants.vams"
 
 module vco(vin, vout_p, vout_n);
   input vin;
-  output vout_p, vout_n;
-  electrical vin, vout_p, vout_n;
+  output reg vout_p;
+  output vout_n;
+  electrical vin;
 
   parameter real f0     = 10.0G;
   parameter real kvco   = 50.0M;
@@ -18,19 +16,34 @@ module vco(vin, vout_p, vout_n);
   parameter real vmax   = 1.8;
   parameter real vdd    = 1.8;
 
-  real freq, phase, clk_val, vctrl_clamped;
+  real vin_a, vc, fv, hp_ps;
+  integer hp_fs;
 
   analog begin
-    vctrl_clamped = V(vin);
-    if (vctrl_clamped < vmin) vctrl_clamped = vmin;
-    if (vctrl_clamped > vmax) vctrl_clamped = vmax;
-
-    freq = f0 + kvco * (vctrl_clamped - vctrl0);
-    phase = idtmod(freq, 0.0, 1.0, -0.5);
-
-    clk_val = (phase < 0.0) ? vdd : 0.0;
-
-    V(vout_p) <+ transition(clk_val, 5p, 5p, 5p);
-    V(vout_n) <+ 0.0;
+    vin_a = V(vin);
   end
+
+  initial #1000 vout_p = 1'b1;  // kick-start at 1ps
+
+  always @(posedge vout_p) begin
+    vc = vin_a;
+    if (vc < vmin) vc = vmin;
+    if (vc > vmax) vc = vmax;
+    fv = f0 + kvco * (vc - vctrl0);
+    hp_ps = 0.5e12 / fv;
+    hp_fs = hp_ps * 1000.0;      // convert ps -> fs
+    vout_p <= #(hp_fs) 1'b0;
+  end
+
+  always @(negedge vout_p) begin
+    vc = vin_a;
+    if (vc < vmin) vc = vmin;
+    if (vc > vmax) vc = vmax;
+    fv = f0 + kvco * (vc - vctrl0);
+    hp_ps = 0.5e12 / fv;
+    hp_fs = hp_ps * 1000.0;
+    vout_p <= #(hp_fs) 1'b1;
+  end
+
+  assign vout_n = 1'b0;
 endmodule
