@@ -1,6 +1,6 @@
-// VCO - Dual implementation
-// `define USE_VERILOG → mixed: analog reads V(vin), digital self-oscillating
-// undefined          → Verilog-A: idtmod phase accumulator
+// VCO with paper-based flicker PN modeling (Hu, UCD 2019)
+// Thermal: per-cycle $dist_normal jitter
+// Flicker: $dist_normal → 5 parallel IIR filters → 30dB/dec roll-off
 `include "disciplines.vams"
 `include "constants.vams"
 
@@ -10,26 +10,114 @@
 module vco(vin, vout_p, vout_n);
   input vin; output reg vout_p; output vout_n;
   electrical vin;
+
   parameter real f0=10.0G, kvco=50.0M, vctrl0=0.9;
   parameter real vmin=0.0, vmax=1.8, vdd=1.8;
-  real vin_a, vc, fv, hp_ps; integer hp_fs;
-  analog begin vin_a = V(vin); end
-  initial #1000 vout_p = 1'b1;
+  parameter real L_1k  = -60.0;   // dBc/Hz @ 1kHz  (flicker dominated)
+  parameter real L_10M = -120.0;  // dBc/Hz @ 10MHz (thermal floor)
+
+  // Computed jitter amplitudes
+  real sigma_thermal, sigma_flicker;
+  real L1k_lin, L10M_lin;
+
+  // IIR filter coefficients (paper Table A.1)
+  real a[0:4], A[0:4];
+
+  // IIR state variables
+  real y[0:4];
+
+  // Working variables
+  real vin_a, vc, fv, hp_ps, half_period;
+  integer hp_fs;
+  integer seed;
+  real randn, jitter_thermal, jitter_flicker, flicker_in, flicker_out;
+
+  integer i;
+
+  // Read analog control voltage
+  analog begin
+    vin_a = V(vin);
+  end
+
+  initial begin
+    // Compute jitter amplitudes from PN spec
+    L1k_lin  = 10.0**(L_1k/10.0);
+    L10M_lin = 10.0**(L_10M/10.0);
+    sigma_thermal = (10.0e6/f0) * $sqrt(1.0/f0) * $sqrt(L10M_lin);
+    sigma_flicker = (1.0e3/f0)  * $sqrt(1.0/f0) * $sqrt(L1k_lin);
+
+    // IIR filter setup
+    a[0]=6.283e-7;  A[0]=1.0;      // 1kHz corner
+    a[1]=6.283e-6;  A[1]=0.3162;   // 10kHz
+    a[2]=6.283e-5;  A[2]=0.1;      // 100kHz
+    a[3]=6.283e-4;  A[3]=0.03162;  // 1MHz
+    a[4]=6.283e-3;  A[4]=0.01;     // 10MHz
+    for (i=0; i<5; i=i+1) y[i] = 0.0;
+
+    seed = 42;
+    vout_p = 1'b0;
+    #1000 vout_p = 1'b1;   // kick-start
+  end
+
+  // --- posedge: schedule falling edge ---
   always @(posedge vout_p) begin
-    vc=vin_a; if(vc<vmin) vc=vmin; if(vc>vmax) vc=vmax;
-    fv=f0+kvco*(vc-vctrl0); hp_ps=0.5e12/fv; hp_fs=hp_ps*1000.0;
+    // Compute nominal half-period
+    vc = vin_a;
+    if (vc < vmin) vc = vmin;
+    if (vc > vmax) vc = vmax;
+    fv = f0 + kvco * (vc - vctrl0);
+    hp_ps = 0.5e12 / fv;  // half period in ps
+    half_period = hp_ps * 1000.0; // -> fs
+
+    // Thermal jitter
+    randn = $dist_normal(seed, 0, 1000) * 1.0e-3;
+    jitter_thermal = randn * sigma_thermal * 1.0e15; // -> fs
+
+    // Flicker jitter: pass through 5 IIR filters
+    flicker_in = randn * sigma_flicker * 1.0e15; // -> fs
+    flicker_out = 0.0;
+    for (i=0; i<5; i=i+1) begin
+      y[i] = (1.0 - a[i]) * y[i] + a[i] * A[i] * flicker_in;
+      flicker_out = flicker_out + y[i];
+    end
+    jitter_flicker = flicker_out;
+
+    // Total delay with jitter
+    hp_fs = half_period + jitter_thermal + jitter_flicker;
+    if (hp_fs < 10) hp_fs = 10;  // minimum delay
     vout_p <= #(hp_fs) 1'b0;
   end
+
+  // --- negedge: schedule rising edge ---
   always @(negedge vout_p) begin
-    vc=vin_a; if(vc<vmin) vc=vmin; if(vc>vmax) vc=vmax;
-    fv=f0+kvco*(vc-vctrl0); hp_ps=0.5e12/fv; hp_fs=hp_ps*1000.0;
+    vc = vin_a;
+    if (vc < vmin) vc = vmin;
+    if (vc > vmax) vc = vmax;
+    fv = f0 + kvco * (vc - vctrl0);
+    hp_ps = 0.5e12 / fv;
+    half_period = hp_ps * 1000.0;
+
+    randn = $dist_normal(seed, 0, 1000) * 1.0e-3;
+    jitter_thermal = randn * sigma_thermal * 1.0e15;
+    flicker_in = randn * sigma_flicker * 1.0e15;
+    flicker_out = 0.0;
+    for (i=0; i<5; i=i+1) begin
+      y[i] = (1.0 - a[i]) * y[i] + a[i] * A[i] * flicker_in;
+      flicker_out = flicker_out + y[i];
+    end
+    jitter_flicker = flicker_out;
+
+    hp_fs = half_period + jitter_thermal + jitter_flicker;
+    if (hp_fs < 10) hp_fs = 10;
     vout_p <= #(hp_fs) 1'b1;
   end
+
   assign vout_n = 1'b0;
 endmodule
 
 `else
 
+// === Original Verilog-A VCO ===
 module vco(vin, vout_p, vout_n);
   input vin; output vout_p, vout_n;
   electrical vin, vout_p, vout_n;
