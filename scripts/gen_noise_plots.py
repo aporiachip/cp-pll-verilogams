@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import os
 
 # Data directory
-DATA_DIR = '/home/user/workspace_hermes/proj1/noise_tb'
+DATA_DIR = os.path.dirname(os.path.abspath(__file__)).replace('scripts','noise_tb')
 OUTPUT = 'noise_report.png'
 
 fs = 1e9  # 1 GHz sampling

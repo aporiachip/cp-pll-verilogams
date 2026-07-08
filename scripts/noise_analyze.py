@@ -160,21 +160,21 @@ if __name__ == '__main__':
     # Module configurations
     modules = [
         {
-            'file': '/home/user/workspace_hermes/proj1/noise_tb/cp_noise_data.txt',
+            'file': 'cp_noise_data.txt',
             'name': 'CP Charge Pump',
             'white_psd': 2e-22,   # A^2/Hz
             'scale': 1.0 / 1000.0,  # V -> A (1k load)
             'unit': 'A',
         },
         {
-            'file': '/home/user/workspace_hermes/proj1/noise_tb/pfd_noise_data.txt',
+            'file': 'pfd_noise_data.txt',
             'name': 'PFD (UP output)',
             'white_psd': 1e-15,   # V^2/Hz
             'scale': 1.0,
             'unit': 'V',
         },
         {
-            'file': '/home/user/workspace_hermes/proj1/noise_tb/div_noise_data.txt',
+            'file': 'div_noise_data.txt',
             'name': 'Divider (clk_out)',
             'white_psd': 1e-16,   # V^2/Hz
             'scale': 1.0,
