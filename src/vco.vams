@@ -1,11 +1,14 @@
-// VCO with paper-based flicker PN modeling (Hu, UCD 2019)
-// Thermal: per-cycle $dist_normal jitter
-// Flicker: $dist_normal → 5 parallel IIR filters → 30dB/dec roll-off
+// VCO - Dual implementation
+// `define USE_VERILOG → paper-based flicker PN ($dist_normal + 5-IIR)
+// undefined          → Verilog-A with white_noise + flicker_noise modulation
 `include "disciplines.vams"
 `include "constants.vams"
 
 `ifdef USE_VERILOG
 
+// === Paper-based flicker PN (Hu, UCD 2019) ===
+// Thermal: per-cycle $dist_normal jitter
+// Flicker: $dist_normal → 5-IIR filter bank → 30dB/dec roll-off
 `timescale 1fs/1fs
 module vco(vin, vout_p, vout_n);
   input vin; output reg vout_p; output vout_n;
@@ -13,102 +16,55 @@ module vco(vin, vout_p, vout_n);
 
   parameter real f0=10.0G, kvco=50.0M, vctrl0=0.9;
   parameter real vmin=0.0, vmax=1.8, vdd=1.8;
-  parameter real L_1k  = -60.0;   // dBc/Hz @ 1kHz  (flicker dominated)
-  parameter real L_10M = -120.0;  // dBc/Hz @ 10MHz (thermal floor)
+  parameter real L_1k  = -60.0;
+  parameter real L_10M = -120.0;
 
-  // Computed jitter amplitudes
-  real sigma_thermal, sigma_flicker;
-  real L1k_lin, L10M_lin;
-
-  // IIR filter coefficients (paper Table A.1)
-  real a[0:4], A[0:4];
-
-  // IIR state variables
-  real y[0:4];
-
-  // Working variables
+  real sigma_thermal, sigma_flicker, L1k_lin, L10M_lin;
+  real a[0:4], A[0:4], y[0:4];
   real vin_a, vc, fv, hp_ps, half_period;
-  integer hp_fs;
-  integer seed;
+  integer hp_fs, seed, i;
   real randn, jitter_thermal, jitter_flicker, flicker_in, flicker_out;
 
-  integer i;
-
-  // Read analog control voltage
-  analog begin
-    vin_a = V(vin);
-  end
+  analog begin vin_a = V(vin); end
 
   initial begin
-    // Compute jitter amplitudes from PN spec
-    L1k_lin  = 10.0**(L_1k/10.0);
-    L10M_lin = 10.0**(L_10M/10.0);
-    sigma_thermal = (10.0e6/f0) * $sqrt(1.0/f0) * $sqrt(L10M_lin);
-    sigma_flicker = (1.0e3/f0)  * $sqrt(1.0/f0) * $sqrt(L1k_lin);
-
-    // IIR filter setup
-    a[0]=6.283e-7;  A[0]=1.0;      // 1kHz corner
-    a[1]=6.283e-6;  A[1]=0.3162;   // 10kHz
-    a[2]=6.283e-5;  A[2]=0.1;      // 100kHz
-    a[3]=6.283e-4;  A[3]=0.03162;  // 1MHz
-    a[4]=6.283e-3;  A[4]=0.01;     // 10MHz
-    for (i=0; i<5; i=i+1) y[i] = 0.0;
-
-    seed = 42;
-    vout_p = 1'b0;
-    #1000 vout_p = 1'b1;   // kick-start
+    L1k_lin=10.0**(L_1k/10.0); L10M_lin=10.0**(L_10M/10.0);
+    sigma_thermal=(10.0e6/f0)*$sqrt(1.0/f0)*$sqrt(L10M_lin);
+    sigma_flicker=(1.0e3/f0)*$sqrt(1.0/f0)*$sqrt(L1k_lin);
+    a[0]=6.283e-7; A[0]=1.0;     a[1]=6.283e-6; A[1]=0.3162;
+    a[2]=6.283e-5; A[2]=0.1;     a[3]=6.283e-4; A[3]=0.03162;
+    a[4]=6.283e-3; A[4]=0.01;
+    for(i=0;i<5;i=i+1) y[i]=0.0;
+    seed=42; vout_p=0; #1000 vout_p=1;
   end
 
-  // --- posedge: schedule falling edge ---
   always @(posedge vout_p) begin
-    // Compute nominal half-period
-    vc = vin_a;
-    if (vc < vmin) vc = vmin;
-    if (vc > vmax) vc = vmax;
-    fv = f0 + kvco * (vc - vctrl0);
-    hp_ps = 0.5e12 / fv;  // half period in ps
-    half_period = hp_ps * 1000.0; // -> fs
-
-    // Thermal jitter
-    randn = $dist_normal(seed, 0, 1000) * 1.0e-3;
-    jitter_thermal = randn * sigma_thermal * 1.0e15; // -> fs
-
-    // Flicker jitter: pass through 5 IIR filters
-    flicker_in = randn * sigma_flicker * 1.0e15; // -> fs
-    flicker_out = 0.0;
-    for (i=0; i<5; i=i+1) begin
-      y[i] = (1.0 - a[i]) * y[i] + a[i] * A[i] * flicker_in;
-      flicker_out = flicker_out + y[i];
+    vc=vin_a; if(vc<vmin) vc=vmin; if(vc>vmax) vc=vmax;
+    fv=f0+kvco*(vc-vctrl0); half_period=0.5e12/fv*1000.0;
+    randn=$dist_normal(seed,0,1000)*1.0e-3;
+    jitter_thermal=randn*sigma_thermal*1.0e15;
+    flicker_in=randn*sigma_flicker*1.0e15; flicker_out=0.0;
+    for(i=0;i<5;i=i+1) begin
+      y[i]=(1.0-a[i])*y[i]+a[i]*A[i]*flicker_in;
+      flicker_out=flicker_out+y[i];
     end
-    jitter_flicker = flicker_out;
-
-    // Total delay with jitter
-    hp_fs = half_period + jitter_thermal + jitter_flicker;
-    if (hp_fs < 10) hp_fs = 10;  // minimum delay
+    hp_fs=half_period+jitter_thermal+flicker_out;
+    if(hp_fs<10) hp_fs=10;
     vout_p <= #(hp_fs) 1'b0;
   end
 
-  // --- negedge: schedule rising edge ---
   always @(negedge vout_p) begin
-    vc = vin_a;
-    if (vc < vmin) vc = vmin;
-    if (vc > vmax) vc = vmax;
-    fv = f0 + kvco * (vc - vctrl0);
-    hp_ps = 0.5e12 / fv;
-    half_period = hp_ps * 1000.0;
-
-    randn = $dist_normal(seed, 0, 1000) * 1.0e-3;
-    jitter_thermal = randn * sigma_thermal * 1.0e15;
-    flicker_in = randn * sigma_flicker * 1.0e15;
-    flicker_out = 0.0;
-    for (i=0; i<5; i=i+1) begin
-      y[i] = (1.0 - a[i]) * y[i] + a[i] * A[i] * flicker_in;
-      flicker_out = flicker_out + y[i];
+    vc=vin_a; if(vc<vmin) vc=vmin; if(vc>vmax) vc=vmax;
+    fv=f0+kvco*(vc-vctrl0); half_period=0.5e12/fv*1000.0;
+    randn=$dist_normal(seed,0,1000)*1.0e-3;
+    jitter_thermal=randn*sigma_thermal*1.0e15;
+    flicker_in=randn*sigma_flicker*1.0e15; flicker_out=0.0;
+    for(i=0;i<5;i=i+1) begin
+      y[i]=(1.0-a[i])*y[i]+a[i]*A[i]*flicker_in;
+      flicker_out=flicker_out+y[i];
     end
-    jitter_flicker = flicker_out;
-
-    hp_fs = half_period + jitter_thermal + jitter_flicker;
-    if (hp_fs < 10) hp_fs = 10;
+    hp_fs=half_period+jitter_thermal+flicker_out;
+    if(hp_fs<10) hp_fs=10;
     vout_p <= #(hp_fs) 1'b1;
   end
 
@@ -117,20 +73,36 @@ endmodule
 
 `else
 
-// === Original Verilog-A VCO ===
+// === Verilog-A with white_noise + flicker_noise frequency modulation ===
 module vco(vin, vout_p, vout_n);
   input vin; output vout_p, vout_n;
-  electrical vin, vout_p, vout_n;
+  electrical vin, vout_p, vout_n, nz;
+
   parameter real f0=10.0G, kvco=50.0M, vctrl0=0.9;
   parameter real vmin=0.0, vmax=1.8, vdd=1.8;
+  parameter real pn_1k=-60.0, pn_10k=-80.0, pn_1M=-120.0;
+
   real freq, phase, clk_val, vctrl_clamped;
+  real L1k, L10k, L1M, Sf_1k, Sf_10k, Sf_white, Kf, Sv_white, Sv_fl;
+
   analog begin
-    vctrl_clamped = V(vin);
+    @(initial_step) begin
+      L1k=pow(10.0,pn_1k/10.0); L10k=pow(10.0,pn_10k/10.0); L1M=pow(10.0,pn_1M/10.0);
+      Sf_1k=L1k*2.0*1.0e3*1.0e3; Sf_10k=L10k*2.0*10.0e3*10.0e3;
+      Sf_white=L1M*2.0*1.0e6*1.0e6;
+      Kf=(Sf_1k-Sf_white)*1.0e3; if(Kf<0.0) Kf=0.0;
+      Sv_white=Sf_white; Sv_fl=Kf;
+    end
+
+    V(nz) <+ white_noise(Sv_white, "vco_fw");
+    if (Kf > 0.0) V(nz) <+ flicker_noise(Sv_fl, 1.0, "vco_ff");
+
+    vctrl_clamped=V(vin);
     if(vctrl_clamped<vmin) vctrl_clamped=vmin;
     if(vctrl_clamped>vmax) vctrl_clamped=vmax;
-    freq = f0 + kvco*(vctrl_clamped-vctrl0);
-    phase = idtmod(freq,0.0,1.0,-0.5);
-    clk_val = (phase<0.0) ? vdd : 0.0;
+    freq=f0+kvco*(vctrl_clamped-vctrl0)+V(nz);
+    phase=idtmod(freq,0.0,1.0,-0.5);
+    clk_val=(phase<0.0)?vdd:0.0;
     V(vout_p) <+ transition(clk_val,5p,5p,5p);
     V(vout_n) <+ 0.0;
   end
