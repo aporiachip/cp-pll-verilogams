@@ -1,0 +1,13 @@
+// Phase-domain PLL - direct connection (VCO integrator = type-II)
+`include "disciplines.vams"
+module pll_phase_top(out);
+  output out;
+  electrical out, ref, fb, ctrl;
+  parameter real Kvco=50.0M;
+  parameter integer n=200;
+
+  oscillator      #(.fc(50.0M)) OSC(.out(ref));
+  phaseDetector   #(.gain(1.0))  PD(.ref(ref), .fb(fb), .out(ctrl));
+  vco_phase       #(.gain(Kvco)) VCO(.vin(ctrl), .out(out));
+  divider_phase   #(.ratio(n))   FDn(.in(out), .out(fb));
+endmodule

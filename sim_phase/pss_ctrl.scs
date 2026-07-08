@@ -1,0 +1,2 @@
+sim1 pss fund=50Meg harms=15 tstab=30u method=gear2only
+sim2 pnoise start=1k stop=100M dec=10 pss=sim1 sweeptype=relative relharmnum=1

@@ -1,0 +1,14 @@
+// Phase-domain PLL testbench with monitoring
+`include "disciplines.vams"
+module tb_pll_phase;
+  electrical out;
+  pll_phase_top i_pll(.out(out));
+
+  // Monitor phase error (should settle to constant)
+  electrical probe;
+  analog begin
+    V(probe) <+ V(out);
+    @(timer(0, 10u))
+      $strobe("t=%0.0fus phase=%.4f rad", $abstime/1u, V(out));
+  end
+endmodule

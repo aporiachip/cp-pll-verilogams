@@ -1,0 +1,6 @@
+// Phase discipline definition for phase-domain PLL modeling
+// Signals carry phase (Angle in radians) rather than voltage
+`include "disciplines.vams"
+discipline phase
+  potential Angle;
+enddiscipline

@@ -1,0 +1,15 @@
+// Loop filter - behavioral: V(out)/V(in) = 1/(1 + s*tau)
+`include "disciplines.vams"
+module loopFilter(in, out);
+  input in; output out;
+  electrical in, out;
+  parameter real r = 25.0K;
+  parameter real c1 = 250.0p;
+  parameter real c2 = 5.0p;
+  analog begin
+    // Simple RC: I = C1*dVout/dt, Vin = Vout + I*R
+    // This avoids rigid branch loops
+    I(out) <+ c1 * ddt(V(out));
+    V(in) <+ V(out) + I(out) * r;
+  end
+endmodule

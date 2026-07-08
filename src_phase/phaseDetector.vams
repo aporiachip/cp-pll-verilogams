@@ -1,0 +1,10 @@
+// Phase detector - subtractor (1V=1rad)
+`include "disciplines.vams"
+module phaseDetector(ref, fb, out);
+  input ref, fb; output out;
+  electrical ref, fb, out;
+  parameter real gain = 1.0;
+  analog begin
+    V(out) <+ gain * (V(ref) - V(fb));
+  end
+endmodule

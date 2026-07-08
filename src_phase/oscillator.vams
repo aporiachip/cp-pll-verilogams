@@ -1,0 +1,16 @@
+// Reference oscillator - phase ramp + noise (electrical: 1V=1rad)
+`include "disciplines.vams"
+`include "constants.vams"
+
+module oscillator(out);
+  output out;
+  electrical out;
+  parameter real fc = 50.0M;
+  parameter real n  = 1e-16;
+  parameter real fl = 1e3;
+  analog begin
+    V(out) <+ 2.0 * `M_PI * fc * $abstime;
+    V(out) <+ flicker_noise(n, 2, "wpn");
+    V(out) <+ flicker_noise(n * fl, 3, "fpn");
+  end
+endmodule

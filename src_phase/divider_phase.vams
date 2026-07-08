@@ -1,0 +1,10 @@
+// Divider - phase divider (1V=1rad)
+`include "disciplines.vams"
+module divider_phase(in, out);
+  input in; output out;
+  electrical in, out;
+  parameter integer ratio = 200;
+  analog begin
+    V(out) <+ V(in) / ratio;
+  end
+endmodule

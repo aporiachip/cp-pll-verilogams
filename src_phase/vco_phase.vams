@@ -1,0 +1,11 @@
+// VCO - phase integrator (1V=1rad)
+`include "disciplines.vams"
+`include "constants.vams"
+module vco_phase(vin, out);
+  input vin; output out;
+  electrical vin, out;
+  parameter real gain = 50.0M;
+  analog begin
+    V(out) <+ 2.0 * `M_PI * gain * idt(V(vin), 0.0);
+  end
+endmodule
